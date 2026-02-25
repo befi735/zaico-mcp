@@ -434,18 +434,6 @@ const TOOLS = [
     },
   },
   {
-    name: 'get_customer',
-    description: '指定IDの取引先データを1件取得します。',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        token: { type: 'string', description: 'ZAICO APIトークン（必須）' },
-        id: { type: 'number', description: '取引先データID（必須）' },
-      },
-      required: ['token', 'id'],
-    },
-  },
-  {
     name: 'create_customer',
     description: '取引先データを作成します。名前は必須です。',
     inputSchema: {
@@ -682,9 +670,6 @@ async function executeTool(name: string, args: Record<string, any>) {
       case 'list_customers':
         result = await zaicoGet(token, '/customers', rest);
         break;
-      case 'get_customer':
-        result = await zaicoRequest(token, 'GET', `/customers/${id}`);
-        break;
       case 'create_customer':
         result = await zaicoRequest(token, 'POST', '/customers', rest);
         break;
@@ -759,7 +744,7 @@ export async function POST(request: NextRequest) {
         },
         serverInfo: {
           name: 'zaico-mcp',
-          version: '1.0.1',
+          version: '1.0.2',
         },
       },
     });
@@ -818,7 +803,7 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   return NextResponse.json({
     name: 'zaico-mcp',
-    version: '1.0.1',
+    version: '1.0.2',
     description: 'ZAICO在庫管理API の MCP Server',
     endpoint: '/api/mcp',
     tools: TOOLS.map((t) => ({ name: t.name, description: t.description })),
