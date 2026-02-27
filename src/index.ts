@@ -39,8 +39,9 @@ async function getZaicoProducts(): Promise<unknown[]> {
   }
 
   try {
-    // 正しいエンドポイント: https://web.zaico.co.jp/api/v1/inventories
-    const response = await axios.get("https://web.zaico.co.jp/api/v1/inventories", {
+    // Zaico APIエンドポイント（web.zaico.co.jpを使用）
+    const endpoint = "https://web.zaico.co.jp/api/v1/inventories";
+    const response = await axios.get(endpoint, {
       headers: {
         Authorization: `Bearer ${apiToken}`,
         "Content-Type": "application/json",
@@ -53,31 +54,37 @@ async function getZaicoProducts(): Promise<unknown[]> {
       throw new Error("Empty response from Zaico API");
     }
     
-    // データ形式をチェック
+    // データ形式をチェック（複数の可能な構造に対応）
+    let products: unknown[] = [];
+    
     if (Array.isArray(response.data)) {
-      return response.data;
+      products = response.data;
+    } else if (response.data.inventories && Array.isArray(response.data.inventories)) {
+      products = response.data.inventories;
     } else if (response.data.products && Array.isArray(response.data.products)) {
-      return response.data.products;
+      products = response.data.products;
+    } else if (response.data.data && Array.isArray(response.data.data)) {
+      products = response.data.data;
     } else {
-      console.error("Unexpected Zaico API response format:", response.data);
-      throw new Error(`Unexpected API response format. Got: ${JSON.stringify(response.data).substring(0, 200)}`);
+      console.error("Unexpected Zaico API response format");
+      throw new Error("Unexpected API response format: could not find products array");
     }
+    
+    return products;
   } catch (error) {
     if (axios.isAxiosError(error)) {
-      const status = error.response?.status ?? "No status";
-      const statusText = error.response?.statusText ?? "No status text";
-      const data = error.response?.data ?? "No response data";
-      console.error("Zaico API Error Details:", {
+      const status = error.response?.status ?? "Unknown";
+      const statusText = error.response?.statusText ?? "Unknown";
+      console.error("Zaico API Error:", {
         status,
         statusText,
-        data,
+        endpoint: "https://web.zaico.co.jp/api/v1/inventories",
         message: error.message,
       });
       throw new Error(
-        `Zaico API error (${status} ${statusText}): ${JSON.stringify(data).substring(0, 200)}`
+        `Zaico API error (${status} ${statusText}): ${error.message}`
       );
     }
-    console.error("Non-axios error:", error);
     throw error;
   }
 }
@@ -85,10 +92,10 @@ async function getZaicoProducts(): Promise<unknown[]> {
 // 商品名で在庫を検索
 async function searchInventoryByName(productName: string): Promise<unknown> {
   const products = await getZaicoProducts();
-  const filtered = products.filter(
-    (p: any) =>
-      p.title && p.title.toLowerCase().includes(productName.toLowerCase())
-  );
+  const filtered = products.filter((p: any) => {
+    const title = p.title || p.name || "";
+    return title.toLowerCase().includes(productName.toLowerCase());
+  });
 
   if (filtered.length === 0) {
     return {
@@ -103,12 +110,12 @@ async function searchInventoryByName(productName: string): Promise<unknown> {
     message: `Found ${filtered.length} product(s)`,
     results: filtered.map((p: any) => ({
       id: p.id,
-      title: p.title,
-      quantity: p.quantity || 0,
-      unit: p.unit,
-      category: p.category,
-      place: p.place,
-      lastUpdated: p.updated_at,
+      title: p.title || p.name,
+      quantity: parseFloat(p.quantity) || parseFloat(p.stock) || 0,
+      unit: p.unit || p.unit_of_measurement || "",
+      category: p.category || p.cate1 || "",
+      place: p.place || p.location || "",
+      lastUpdated: p.updated_at || p.last_updated || new Date().toISOString(),
     })),
   };
 }
@@ -118,12 +125,12 @@ async function listAllProducts(): Promise<unknown> {
   const products = await getZaicoProducts();
   const formattedProducts = products.map((p: any) => ({
     id: p.id,
-    title: p.title,
-    quantity: p.quantity || 0,
-    unit: p.unit,
-    category: p.category,
-    place: p.place,
-    lastUpdated: p.updated_at,
+    title: p.title || p.name,
+    quantity: parseFloat(p.quantity) || parseFloat(p.stock) || 0,
+    unit: p.unit || p.unit_of_measurement || "",
+    category: p.category || p.cate1 || "",
+    place: p.place || p.location || "",
+    lastUpdated: p.updated_at || p.last_updated || new Date().toISOString(),
   }));
   return {
     success: true,
