@@ -89,35 +89,72 @@ async function getZaicoProducts(): Promise<unknown[]> {
   }
 }
 
-// 商品名で在庫を検索
+// 商品名で在庫を検索（API クエリパラメータを使用）
 async function searchInventoryByName(productName: string): Promise<unknown> {
-  const products = await getZaicoProducts();
-  const filtered = products.filter((p: any) => {
-    const title = p.title || p.name || "";
-    return title.toLowerCase().includes(productName.toLowerCase());
-  });
-
-  if (filtered.length === 0) {
-    return {
-      success: false,
-      message: `Product "${productName}" not found`,
-      results: [],
-    };
+  const apiToken = process.env.ZAICO_API_TOKEN;
+  if (!apiToken) {
+    throw new Error("ZAICO_API_TOKEN is not set");
   }
 
-  return {
-    success: true,
-    message: `Found ${filtered.length} product(s)`,
-    results: filtered.map((p: any) => ({
-      id: p.id,
-      title: p.title || p.name,
-      quantity: parseFloat(p.quantity) || parseFloat(p.stock) || 0,
-      unit: p.unit || p.unit_of_measurement || "",
-      category: p.category || p.cate1 || "",
-      place: p.place || p.location || "",
-      lastUpdated: p.updated_at || p.last_updated || new Date().toISOString(),
-    })),
-  };
+  try {
+    // API クエリパラメータで検索
+    const endpoint = `https://web.zaico.co.jp/api/v1/inventories/?title=${encodeURIComponent(productName)}`;
+    const response = await axios.get(endpoint, {
+      headers: {
+        Authorization: `Bearer ${apiToken}`,
+        "Content-Type": "application/json",
+      },
+      timeout: 10000,
+    });
+    
+    if (!response.data) {
+      return {
+        success: false,
+        message: `Product "${productName}" not found`,
+        results: [],
+      };
+    }
+    
+    // レスポンス形式をチェック
+    let products: unknown[] = [];
+    if (Array.isArray(response.data)) {
+      products = response.data;
+    } else if (response.data.inventories && Array.isArray(response.data.inventories)) {
+      products = response.data.inventories;
+    } else if (response.data.products && Array.isArray(response.data.products)) {
+      products = response.data.products;
+    } else if (response.data.data && Array.isArray(response.data.data)) {
+      products = response.data.data;
+    }
+    
+    if (products.length === 0) {
+      return {
+        success: false,
+        message: `Product "${productName}" not found`,
+        results: [],
+      };
+    }
+
+    return {
+      success: true,
+      message: `Found ${products.length} product(s)`,
+      results: products.map((p: any) => ({
+        id: p.id,
+        title: p.title || p.name,
+        quantity: parseFloat(p.quantity) || parseFloat(p.stock) || 0,
+        unit: p.unit || p.unit_of_measurement || "",
+        category: p.category || p.cate1 || p.categories?.[0] || "",
+        place: p.place || p.location || "",
+        lastUpdated: p.updated_at || p.last_updated || new Date().toISOString(),
+      })),
+    };
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status ?? "Unknown";
+      throw new Error(`Zaico API error (${status}): ${error.message}`);
+    }
+    throw error;
+  }
 }
 
 // すべての商品を取得
